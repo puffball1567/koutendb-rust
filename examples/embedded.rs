@@ -1,4 +1,4 @@
-use koutendb::{ReadRingOptions, RetrieveOptions, KoutenDb};
+use koutendb::{KoutenDb, ReadRingOptions, RetrieveOptions};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = KoutenDb::open_default()?;

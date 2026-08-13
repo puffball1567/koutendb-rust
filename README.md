@@ -6,8 +6,9 @@ This crate currently wraps the KoutenDB C ABI. It gives Rust applications a safe
 embedded API while KoutenDB keeps placement, ring metadata, retrieval planning,
 and ID generation inside the database core.
 
-Current driver version: `v0.1.5`.
+Current driver version: `v0.1.6`.
 Tested against KoutenDB core C ABI v2.
+The v0.12 persistence APIs require a v0.12-compatible KoutenDB core build.
 
 ## Install
 
@@ -123,11 +124,11 @@ KOUTEN_PEERS=127.0.0.1:17651 KOUTEN_TLS_CA=/path/to/server.crt \
 
 | Area | Status |
 |---|---|
-| Embedded open | `KoutenDb::open_default`, `open`, `open_dir` |
+| Embedded open | `KoutenDb::open_default`, `open`, `open_dir`, `open_dir_with`, `OpenDirOptions` (strong durability / disk-backed) |
 | Cluster connect | `connect`, `connect_auth`, `connect_auth_tls`, `ConnectOptions` |
 | TLS | `ConnectOptions::tls`, `tls_ca_file`, `tls_server_name`, `danger_accept_invalid_certs` |
-| Writes | `put`, `put_str`, `put_json`, `put_nif`, `put_bif`, `put_vec`, `put_vec_codec`, `put_json_vec`, `put_nif_vec`, `put_bif_vec` |
-| Reads | `get`, `get_encoded`, `get_string`, `batch_get`, `read_ring_json`, `ReadRingOptions` |
+| Writes / mutations | `put`, codec/vector helpers, `update`, `update_codec`, `update_str`, `update_json`, `remove` |
+| Reads | `get`, `get_encoded`, `get_string`, `exists`, `batch_get`, `read_ring_json`, `ReadRingOptions` |
 | Projection | `query`, `query_string` |
 | Retrieval | `retrieve`, `retrieve_with`, `RetrieveOptions`, `RetrieveResult::first`, `payloads`, `payload_strings` |
 | Atlas | `atlas` |
@@ -135,14 +136,17 @@ KOUTEN_PEERS=127.0.0.1:17651 KOUTEN_TLS_CA=/path/to/server.crt \
 | Orbit helpers | `now`, `advance`, `locate`, `next_visit`, `next_join` |
 | IDs | `KoutenId`, `Display`, `FromStr`, `KoutenId::parse` |
 | Payload codecs | `PayloadCodec`, `EncodedPayload` |
+| Metrics | `metrics`, `checkpoint_metrics`, `MetricsFormat` |
+| Segment maintenance | `segment_status`, `plan_segment_maintenance`, `run_segment_maintenance`, `segment_maintenance_status`, `recover_segment_maintenance` |
+| Generation checkpoints | `create_checkpoint`, `checkpoint_status`, `list_checkpoints`, `cleanup_checkpoints`, `restore_checkpoint` |
 | Error handling | `Result<T, koutendb::Error>`, `ErrorKind` |
 
 Still pending:
 
 - transaction API;
-- update / patch / delete / list / count APIs, pending C ABI support;
-- dump / import / backup / restore APIs;
-- metrics / universe sync / recovery APIs;
+- patch / list / count APIs, pending C ABI support;
+- dump / import / backup / restore APIs (generation checkpoint restore is available);
+- universe sync and broader recovery APIs;
 - native TCP driver with timeout/retry/pooling.
 
 ## Development
