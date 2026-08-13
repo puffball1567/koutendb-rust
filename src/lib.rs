@@ -82,6 +82,107 @@ pub enum PayloadCodec {
     Bif,
 }
 
+/// Text format used by KoutenDB operational metrics endpoints.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum MetricsFormat {
+    KeyValue = 0,
+    Prometheus = 1,
+    OpenMetrics = 2,
+}
+
+/// Options for opening a persistent embedded store with the v0.12 read layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OpenDirOptions {
+    pub nodes: i32,
+    pub strong_durability: bool,
+    pub disk_backed: bool,
+}
+
+impl Default for OpenDirOptions {
+    fn default() -> Self {
+        Self {
+            nodes: 8,
+            strong_durability: false,
+            disk_backed: false,
+        }
+    }
+}
+
+impl OpenDirOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn nodes(mut self, value: i32) -> Self {
+        self.nodes = value;
+        self
+    }
+
+    pub fn strong_durability(mut self, value: bool) -> Self {
+        self.strong_durability = value;
+        self
+    }
+
+    pub fn disk_backed(mut self, value: bool) -> Self {
+        self.disk_backed = value;
+        self
+    }
+
+    pub fn open(self, dir: &str) -> Result<KoutenDb, Error> {
+        KoutenDb::open_dir_with(dir, self)
+    }
+}
+
+/// Selection and resource bounds shared by maintenance planning and execution.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SegmentMaintenancePolicy {
+    pub stale_ratio: f64,
+    pub min_stale_records: i32,
+    pub max_rings: i32,
+    pub max_bytes: i64,
+    pub max_elapsed_ms: i64,
+}
+
+impl Default for SegmentMaintenancePolicy {
+    fn default() -> Self {
+        Self {
+            stale_ratio: 0.25,
+            min_stale_records: 256,
+            max_rings: 0,
+            max_bytes: 0,
+            max_elapsed_ms: 0,
+        }
+    }
+}
+
+impl SegmentMaintenancePolicy {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn stale_threshold(mut self, ratio: f64, min_records: i32) -> Self {
+        self.stale_ratio = ratio;
+        self.min_stale_records = min_records;
+        self
+    }
+
+    pub fn max_rings(mut self, value: i32) -> Self {
+        self.max_rings = value;
+        self
+    }
+
+    pub fn max_bytes(mut self, value: i64) -> Self {
+        self.max_bytes = value;
+        self
+    }
+
+    pub fn max_elapsed_ms(mut self, value: i64) -> Self {
+        self.max_elapsed_ms = value;
+        self
+    }
+}
+
 impl PayloadCodec {
     fn as_c(self) -> c_int {
         match self {
@@ -148,6 +249,12 @@ extern "C" {
     fn kouten_last_error() -> *const c_char;
     fn kouten_open(nodes: c_int) -> *mut c_void;
     fn kouten_open_dir(nodes: c_int, dir: *const c_char) -> *mut c_void;
+    fn kouten_open_dir_options(
+        nodes: c_int,
+        dir: *const c_char,
+        durability_strong: c_int,
+        disk_backed: c_int,
+    ) -> *mut c_void;
     fn kouten_connect(peers: *const c_char) -> *mut c_void;
     fn kouten_connect_auth(
         peers: *const c_char,
@@ -171,6 +278,12 @@ extern "C" {
     ) -> *mut c_void;
     fn kouten_close(db: *mut c_void);
     fn kouten_free(p: *mut c_void);
+    fn kouten_metrics_text(db: *mut c_void, format: c_int, out_len: *mut usize) -> *mut c_void;
+    fn kouten_checkpoint_metrics_text(
+        root: *const c_char,
+        format: c_int,
+        out_len: *mut usize,
+    ) -> *mut c_void;
     fn kouten_now(db: *mut c_void) -> c_double;
     fn kouten_advance(db: *mut c_void, dt: c_double);
     fn kouten_ring_configure(db: *mut c_void, ring: *const c_char, period: c_double) -> c_int;
@@ -221,6 +334,16 @@ extern "C" {
         out_len: *mut usize,
         out_codec: *mut c_int,
     ) -> *mut c_void;
+    fn kouten_exists(db: *mut c_void, id: KoutenId) -> c_int;
+    fn kouten_update(db: *mut c_void, id: KoutenId, data: *const c_void, len: usize) -> c_int;
+    fn kouten_update_codec(
+        db: *mut c_void,
+        id: KoutenId,
+        data: *const c_void,
+        len: usize,
+        codec: c_int,
+    ) -> c_int;
+    fn kouten_remove(db: *mut c_void, id: KoutenId) -> c_int;
     fn kouten_batch_get(
         db: *mut c_void,
         ids: *const KoutenId,
@@ -262,6 +385,54 @@ extern "C" {
         query_vec: *const c_float,
         query_vec_len: usize,
         max_centroid_dims: c_int,
+        out_len: *mut usize,
+    ) -> *mut c_void;
+    fn kouten_segment_status_json(
+        db: *mut c_void,
+        stale_ratio: c_double,
+        min_stale_records: c_int,
+        out_len: *mut usize,
+    ) -> *mut c_void;
+    fn kouten_segment_maintenance_plan_json(
+        db: *mut c_void,
+        stale_ratio: c_double,
+        min_stale_records: c_int,
+        max_rings: c_int,
+        max_bytes: i64,
+        max_elapsed_ms: i64,
+        out_len: *mut usize,
+    ) -> *mut c_void;
+    fn kouten_segment_maintenance_run_json(
+        db: *mut c_void,
+        stale_ratio: c_double,
+        min_stale_records: c_int,
+        max_rings: c_int,
+        max_bytes: i64,
+        max_elapsed_ms: i64,
+        out_len: *mut usize,
+    ) -> *mut c_void;
+    fn kouten_segment_maintenance_status_json(db: *mut c_void, out_len: *mut usize) -> *mut c_void;
+    fn kouten_segment_maintenance_recover(db: *mut c_void, out_recovered: *mut c_int) -> c_int;
+    fn kouten_checkpoint_create_json(
+        db: *mut c_void,
+        root: *const c_char,
+        checkpoint_id: *const c_char,
+        out_len: *mut usize,
+    ) -> *mut c_void;
+    fn kouten_checkpoint_status_json(
+        checkpoint_dir: *const c_char,
+        out_len: *mut usize,
+    ) -> *mut c_void;
+    fn kouten_checkpoint_list_json(root: *const c_char, out_len: *mut usize) -> *mut c_void;
+    fn kouten_checkpoint_cleanup_json(
+        root: *const c_char,
+        keep: c_int,
+        out_len: *mut usize,
+    ) -> *mut c_void;
+    fn kouten_checkpoint_restore_json(
+        checkpoint_dir: *const c_char,
+        data_dir: *const c_char,
+        overwrite: c_int,
         out_len: *mut usize,
     ) -> *mut c_void;
     fn kouten_locate(db: *mut c_void, id: KoutenId, at: c_double) -> c_int;
@@ -660,6 +831,20 @@ impl KoutenDb {
         Self::from_raw(raw)
     }
 
+    pub fn open_dir_with(dir: &str, options: OpenDirOptions) -> Result<Self, Error> {
+        init()?;
+        let dir = CString::new(dir)?;
+        let raw = unsafe {
+            kouten_open_dir_options(
+                options.nodes as c_int,
+                dir.as_ptr(),
+                c_int::from(options.strong_durability),
+                c_int::from(options.disk_backed),
+            )
+        };
+        Self::from_raw(raw)
+    }
+
     pub fn connect(peers: &str) -> Result<Self, Error> {
         init()?;
         let peers = CString::new(peers)?;
@@ -964,6 +1149,54 @@ impl KoutenDb {
             .map_err(|e| Error::new(ErrorKind::Utf8, e.to_string()))
     }
 
+    pub fn exists(&self, id: KoutenId) -> Result<bool, Error> {
+        match unsafe { kouten_exists(self.raw, id) } {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err(Error::last()),
+        }
+    }
+
+    pub fn update(&self, id: KoutenId, payload: &[u8]) -> Result<(), Error> {
+        self.check(unsafe {
+            kouten_update(
+                self.raw,
+                id,
+                payload.as_ptr() as *const c_void,
+                payload.len(),
+            )
+        })
+    }
+
+    pub fn update_codec(
+        &self,
+        id: KoutenId,
+        payload: &[u8],
+        codec: PayloadCodec,
+    ) -> Result<(), Error> {
+        self.check(unsafe {
+            kouten_update_codec(
+                self.raw,
+                id,
+                payload.as_ptr() as *const c_void,
+                payload.len(),
+                codec.as_c(),
+            )
+        })
+    }
+
+    pub fn update_str(&self, id: KoutenId, payload: &str) -> Result<(), Error> {
+        self.update(id, payload.as_bytes())
+    }
+
+    pub fn update_json(&self, id: KoutenId, json: &str) -> Result<(), Error> {
+        self.update_codec(id, json.as_bytes(), PayloadCodec::Json)
+    }
+
+    pub fn remove(&self, id: KoutenId) -> Result<(), Error> {
+        self.check(unsafe { kouten_remove(self.raw, id) })
+    }
+
     pub fn batch_get(&self, ids: &[KoutenId]) -> Result<Vec<Vec<u8>>, Error> {
         let ptr = if ids.is_empty() {
             ptr::null()
@@ -1130,6 +1363,120 @@ impl KoutenDb {
         String::from_utf8(bytes).map_err(|e| Error::new(ErrorKind::Utf8, e.to_string()))
     }
 
+    pub fn metrics(&self, format: MetricsFormat) -> Result<String, Error> {
+        owned_text(|len| unsafe { kouten_metrics_text(self.raw, format as c_int, len) })
+    }
+
+    pub fn segment_status(
+        &self,
+        stale_ratio: f64,
+        min_stale_records: i32,
+    ) -> Result<String, Error> {
+        owned_text(|len| unsafe {
+            kouten_segment_status_json(self.raw, stale_ratio, min_stale_records, len)
+        })
+    }
+
+    pub fn plan_segment_maintenance(
+        &self,
+        policy: SegmentMaintenancePolicy,
+    ) -> Result<String, Error> {
+        owned_text(|len| unsafe {
+            kouten_segment_maintenance_plan_json(
+                self.raw,
+                policy.stale_ratio,
+                policy.min_stale_records,
+                policy.max_rings,
+                policy.max_bytes,
+                policy.max_elapsed_ms,
+                len,
+            )
+        })
+    }
+
+    pub fn run_segment_maintenance(
+        &self,
+        policy: SegmentMaintenancePolicy,
+    ) -> Result<String, Error> {
+        owned_text(|len| unsafe {
+            kouten_segment_maintenance_run_json(
+                self.raw,
+                policy.stale_ratio,
+                policy.min_stale_records,
+                policy.max_rings,
+                policy.max_bytes,
+                policy.max_elapsed_ms,
+                len,
+            )
+        })
+    }
+
+    pub fn segment_maintenance_status(&self) -> Result<String, Error> {
+        owned_text(|len| unsafe { kouten_segment_maintenance_status_json(self.raw, len) })
+    }
+
+    pub fn recover_segment_maintenance(&self) -> Result<bool, Error> {
+        let mut recovered = 0;
+        self.check(unsafe { kouten_segment_maintenance_recover(self.raw, &mut recovered) })?;
+        Ok(recovered != 0)
+    }
+
+    pub fn create_checkpoint(
+        &self,
+        root: Option<&str>,
+        checkpoint_id: Option<&str>,
+    ) -> Result<String, Error> {
+        let root = opt_cstring(root)?;
+        let checkpoint_id = opt_cstring(checkpoint_id)?;
+        owned_text(|len| unsafe {
+            kouten_checkpoint_create_json(self.raw, opt_ptr(&root), opt_ptr(&checkpoint_id), len)
+        })
+    }
+
+    pub fn checkpoint_status(checkpoint_dir: &str) -> Result<String, Error> {
+        init()?;
+        let checkpoint_dir = CString::new(checkpoint_dir)?;
+        owned_text(|len| unsafe { kouten_checkpoint_status_json(checkpoint_dir.as_ptr(), len) })
+    }
+
+    pub fn list_checkpoints(root: &str) -> Result<String, Error> {
+        init()?;
+        let root = CString::new(root)?;
+        owned_text(|len| unsafe { kouten_checkpoint_list_json(root.as_ptr(), len) })
+    }
+
+    pub fn cleanup_checkpoints(root: &str, keep: i32) -> Result<String, Error> {
+        init()?;
+        let root = CString::new(root)?;
+        owned_text(|len| unsafe { kouten_checkpoint_cleanup_json(root.as_ptr(), keep, len) })
+    }
+
+    pub fn restore_checkpoint(
+        checkpoint_dir: &str,
+        data_dir: &str,
+        overwrite: bool,
+    ) -> Result<String, Error> {
+        init()?;
+        let checkpoint_dir = CString::new(checkpoint_dir)?;
+        let data_dir = CString::new(data_dir)?;
+        owned_text(|len| unsafe {
+            kouten_checkpoint_restore_json(
+                checkpoint_dir.as_ptr(),
+                data_dir.as_ptr(),
+                c_int::from(overwrite),
+                len,
+            )
+        })
+    }
+
+    pub fn checkpoint_metrics(root: &str, format: MetricsFormat) -> Result<String, Error> {
+        init()?;
+        let root = CString::new(root)?;
+        owned_text(|len| unsafe {
+            kouten_checkpoint_metrics_text(root.as_ptr(), format as c_int, len)
+        })
+    }
+
     pub fn locate(&self, id: KoutenId, at: Option<f64>) -> Result<i32, Error> {
         let node = unsafe { kouten_locate(self.raw, id, at.unwrap_or(-1.0)) };
         if node < 0 {
@@ -1240,6 +1587,16 @@ unsafe fn take_buffer(p: *mut c_void, len: usize) -> Vec<u8> {
     let bytes = slice::from_raw_parts(p as *const u8, len).to_vec();
     kouten_free(p);
     bytes
+}
+
+fn owned_text(call: impl FnOnce(*mut usize) -> *mut c_void) -> Result<String, Error> {
+    let mut len = 0usize;
+    let p = call(&mut len);
+    if p.is_null() {
+        return Err(Error::last());
+    }
+    let bytes = unsafe { take_buffer(p, len) };
+    String::from_utf8(bytes).map_err(|e| Error::new(ErrorKind::Utf8, e.to_string()))
 }
 
 #[cfg(test)]
@@ -1373,15 +1730,17 @@ mod tests {
         assert!(insecure.tls_insecure_skip_verify);
     }
 
-    // `connect` only builds the client; the socket is opened on first use, so
-    // the TLS handshake can only fail once an operation runs.
+    // Current core connections fail eagerly when the peer or TLS setup is
+    // unavailable, rather than returning a handle that fails on first use.
     #[test]
-    fn tls_connect_defers_failure_to_first_operation() {
-        let db = ConnectOptions::new("127.0.0.1:1")
+    fn tls_connect_fails_eagerly() {
+        let result = ConnectOptions::new("127.0.0.1:1")
             .tls_ca_file("/nonexistent/ca.pem")
-            .connect()
-            .expect("connect is lazy and should not dial a peer");
-        let err = db.put_str("docs/rust", "unreachable").unwrap_err();
+            .connect();
+        let err = match result {
+            Ok(_) => panic!("connect unexpectedly succeeded"),
+            Err(err) => err,
+        };
         assert!(!err.to_string().is_empty());
     }
 
@@ -1427,5 +1786,97 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn v012_crud_maintenance_and_checkpoint_surface() {
+        let nonce = format!(
+            "{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(format!("koutendb-rust-v012-{nonce}"));
+        let checkpoints = std::env::temp_dir().join(format!("koutendb-rust-cp-{nonce}"));
+        let restored = std::env::temp_dir().join(format!("koutendb-rust-restore-{nonce}"));
+        std::fs::create_dir_all(&root).unwrap();
+
+        let db = OpenDirOptions::new()
+            .nodes(1)
+            .strong_durability(true)
+            .disk_backed(true)
+            .open(root.to_str().unwrap())
+            .unwrap();
+        let id = db.put_str("docs/mutable", "before").unwrap();
+        assert!(db.exists(id).unwrap());
+        db.update_json(id, r#"{"state":"after"}"#).unwrap();
+        assert_eq!(
+            db.get_encoded(id).unwrap().unwrap().codec,
+            PayloadCodec::Json
+        );
+        assert!(db
+            .metrics(MetricsFormat::Prometheus)
+            .unwrap()
+            .contains("koutendb_items"));
+
+        let policy = SegmentMaintenancePolicy::new()
+            .stale_threshold(0.0, 0)
+            .max_rings(1)
+            .max_bytes(1_048_576)
+            .max_elapsed_ms(1_000);
+        assert!(db
+            .plan_segment_maintenance(policy)
+            .unwrap()
+            .contains("decisions"));
+        assert!(db
+            .run_segment_maintenance(policy)
+            .unwrap()
+            .contains("decisions"));
+        assert!(db.segment_status(0.0, 0).unwrap().contains("rings"));
+        assert!(!db.recover_segment_maintenance().unwrap());
+
+        let created = db
+            .create_checkpoint(Some(checkpoints.to_str().unwrap()), Some("rust-1"))
+            .unwrap();
+        assert!(created.contains(r#""verified":true"#));
+        let checkpoint_dir = checkpoints.join("rust-1");
+        assert!(
+            KoutenDb::checkpoint_status(checkpoint_dir.to_str().unwrap())
+                .unwrap()
+                .contains(r#""reason":"verified""#)
+        );
+        assert!(KoutenDb::list_checkpoints(checkpoints.to_str().unwrap())
+            .unwrap()
+            .contains(r#""count":1"#));
+        assert!(KoutenDb::checkpoint_metrics(
+            checkpoints.to_str().unwrap(),
+            MetricsFormat::OpenMetrics,
+        )
+        .unwrap()
+        .contains("# EOF"));
+        drop(db);
+
+        KoutenDb::restore_checkpoint(
+            checkpoint_dir.to_str().unwrap(),
+            restored.to_str().unwrap(),
+            false,
+        )
+        .unwrap();
+        let restored_db = OpenDirOptions::new()
+            .nodes(1)
+            .strong_durability(true)
+            .disk_backed(true)
+            .open(restored.to_str().unwrap())
+            .unwrap();
+        assert!(restored_db.exists(id).unwrap());
+        restored_db.remove(id).unwrap();
+        assert!(!restored_db.exists(id).unwrap());
+        drop(restored_db);
+
+        std::fs::remove_dir_all(root).unwrap();
+        std::fs::remove_dir_all(checkpoints).unwrap();
+        std::fs::remove_dir_all(restored).unwrap();
     }
 }
