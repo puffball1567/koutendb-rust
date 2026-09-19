@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: puffball1567/koutendb
-          ref: e36b424bcfd9cd0dfa24ae121f4b4dd028b0eaac
+          ref: d6ccfa37fbf66231b36cc7de63a8668815f6a97f
           path: koutendb-core
 
       - name: Install Nim on Linux
