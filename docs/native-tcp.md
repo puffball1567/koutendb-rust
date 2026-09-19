@@ -1,8 +1,14 @@
-# Native TCP (Development)
+# Native TCP
 
-This branch adds the optional `tcp` feature. The default remains `ffi`, preserving
+Version 0.2.0 adds the optional `tcp` feature. The default remains `ffi`, preserving
 the existing embedded API. TCP-only builds do not link libkoutendb and do not
 require Nim or a KoutenDB core checkout on the application machine.
+
+Install a TCP-only dependency:
+
+```sh
+cargo add koutendb@0.2 --no-default-features --features tcp
+```
 
 For a source checkout dependency:
 

@@ -2,14 +2,13 @@
 
 Rust driver for [KoutenDB](https://github.com/puffball1567/koutendb).
 
-The default `ffi` feature wraps the KoutenDB C ABI for embedded use. This branch
-also adds an optional `tcp` client that needs no KoutenDB shared library.
+The default `ffi` feature wraps the KoutenDB C ABI for embedded use. The optional
+`tcp` client needs no KoutenDB shared library.
 Both leave placement and ID generation in the database core.
 
 See [native TCP setup, TLS and failure semantics](docs/native-tcp.md).
-The TCP feature is not yet included in the published version listed below.
 
-Current driver version: `v0.1.6`.
+Current driver version: `v0.2.0`.
 Tested against KoutenDB core C ABI v2.
 The v0.12 persistence APIs require a v0.12-compatible KoutenDB core build.
 

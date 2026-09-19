@@ -17,8 +17,8 @@ core commit `e36b424bcfd9cd0dfa24ae121f4b4dd028b0eaac`:
 - TCP-only cargo package verification: passed.
 - ELF dependency inspection: no libkoutendb dependency.
 
-Linux/macOS workflow coverage is configured but has not yet been run on GitHub
-for this branch. These results are not a release publication, load test or
-long-duration operational certification.
+The GitHub workflow runs the shared conformance matrix on Linux and macOS.
+See the release commit's workflow checks for CI results. The local results above
+are correctness/integration checks, not load or long-duration operational tests.
 
 See [native TCP usage and reproduction commands](native-tcp.md).
