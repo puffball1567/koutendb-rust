@@ -2,9 +2,12 @@
 
 Rust driver for [KoutenDB](https://github.com/puffball1567/koutendb).
 
-This crate currently wraps the KoutenDB C ABI. It gives Rust applications a safe
-embedded API while KoutenDB keeps placement, ring metadata, retrieval planning,
-and ID generation inside the database core.
+The default `ffi` feature wraps the KoutenDB C ABI for embedded use. This branch
+also adds an optional `tcp` client that needs no KoutenDB shared library.
+Both leave placement and ID generation in the database core.
+
+See [native TCP setup, TLS and failure semantics](docs/native-tcp.md).
+The TCP feature is not yet included in the published version listed below.
 
 Current driver version: `v0.1.6`.
 Tested against KoutenDB core C ABI v2.
@@ -12,7 +15,7 @@ The v0.12 persistence APIs require a v0.12-compatible KoutenDB core build.
 
 ## Install
 
-Prerequisites:
+Embedded-mode prerequisites (TCP-only applications do not need Nim or the core library):
 
 - Rust stable and Cargo
 - Nim 2.2.x to build KoutenDB core. Install Nim: <https://nim-lang.org/install.html>. Nimble is included with the standard Nim installation.
@@ -36,7 +39,7 @@ Build the KoutenDB shared library first:
 git clone https://github.com/puffball1567/koutendb.git
 cd koutendb
 nimble install -y
-nim c --app:lib -d:release --nimcache:/tmp/nimcache_kouten_capi -o:lib/libkoutendb.so src/koutendb_capi.nim
+bash scripts/build_capi.sh
 ```
 
 Then point this Rust crate at the KoutenDB core checkout or shared-library
